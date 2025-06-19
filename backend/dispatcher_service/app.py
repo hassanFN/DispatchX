@@ -4,7 +4,7 @@ TOPIC_NAME = 'dispatch-tasks'
 
 consumer = KafkaConsumer(
     TOPIC_NAME,
-    bootstrap_servers='kafka:9092',
+    bootstrap_servers='kafka:9092',    # internal-only
     auto_offset_reset='earliest',
     group_id='dispatch-group'
 )

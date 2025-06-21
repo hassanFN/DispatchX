@@ -129,6 +129,8 @@ docker-compose logs -f dispatcher_service
 | Service folder | `cd backend/dispatcher_service` |
 | Validate schema | `python validate_schema.py` |
 | Run producer | `python send_test.py` *(after setting `KAFKA_BOOTSTRAP`)* |
+| Rebuild Container | `docker-compose build dispatcher_service`
+                    | `docker-compose up -d` |
 
 ---
 

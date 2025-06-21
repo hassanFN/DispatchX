@@ -30,8 +30,10 @@ consumer = KafkaConsumer(
 print("🚀 Listening for messages on 'dispatch-tasks'...")
 
 for msg in consumer:
+    print(f"📥 Received message with offset {msg.offset} and key {msg.key}")
     task = msg.value
     if task is None:
+        print('❌ Skipping non-JSON message')
         continue
 
     print(f"📦 Received: {json.dumps(task)}")

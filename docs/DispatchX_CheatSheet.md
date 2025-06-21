@@ -75,33 +75,6 @@ invalid_lat_eta: ❌ Validation error: 'twenty' is not of type 'integer'
 
 ## 📤 5. Send a Test Message (Producer)
 
-### 🔹 A) From Host (localhost)
-
-1. Check Kafka port is available:
-
-```bash
-nc -vz localhost 9092
-# → Connection succeeded!
-```
-
-2. Export Kafka address:
-
-```bash
-export KAFKA_BOOTSTRAP=localhost:9092
-```
-
-3. Run the test producer:
-
-```bash
-python backend/dispatcher_service/send_test.py
-```
-
-**You should see:**
-
-```
-✅ Test message sent via localhost:9092 on topic 'dispatch-tasks'
-```
-
 ---
 
 ### 🔹 B) From Inside the Container
@@ -119,7 +92,8 @@ docker-compose exec -T dispatcher_service sh -c "python send_test.py"
 ---
 
 ## 🪵 6. View Dispatcher Logs (Consumer)
-
+  (in a separate termnial run the following to view logs):
+  
 ```bash
 docker-compose logs -f dispatcher_service
 ```

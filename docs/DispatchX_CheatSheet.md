@@ -152,4 +152,11 @@ docker-compose logs -f dispatcher_service
    ```bash
    git status
 
+ 6. **Pull from GitHub Repo to local device**
+    ```bash
+    git fetch
+    git pull
+
+---
+
 Happy hacking! 💻🔁

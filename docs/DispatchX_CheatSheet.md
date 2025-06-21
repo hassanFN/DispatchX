@@ -134,4 +134,22 @@ docker-compose logs -f dispatcher_service
 
 ---
 
+## 👾 Git Quick Workflow
+
+1. **Stage all changes**
+   ```bash
+   git add .
+
+2. **Commit with a message**
+   ```bash
+   git commit -m "Your descriptive commit message"
+
+3. **Push to your remote (default)**
+   ```bash
+   git push
+
+5. **Tip: Check your status before and after staging**
+   ```bash
+   git status
+
 Happy hacking! 💻🔁

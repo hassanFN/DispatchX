@@ -29,3 +29,15 @@ services:
     environment:
       PYTHONUNBUFFERED: '1'
       KAFKA_BOOTSTRAP: kafka:9092
+
+
+  send_test_service:
+    build: ./backend/send_test_service
+    volumes:
+      - ./backend/send_test_service:/app
+    depends_on:
+      - kafka
+    restart: always
+    environment:
+      PYTHONUNBUFFERED: '1'
+      KAFKA_BOOTSTRAP: kafka:9092

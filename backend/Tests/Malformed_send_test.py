@@ -6,6 +6,7 @@ from jsonschema import validate, ValidationError
 from confluent_kafka.schema_registry import SchemaRegistryClient
 from confluent_kafka.schema_registry.json_schema import JSONSerializer
 from confluent_kafka import SerializingProducer
+from confluent_kafka import Producer 
 
 
 # -------------------------------
@@ -24,72 +25,32 @@ task = {
     "schema_version": 1,
     "task_id": "task-001",
     "order_id": "order-123",
-    "pickup": {
-        "address": "123 Main St, Springfield, IL",
-        "lat": 40.1123,
-        "lon": -88.2284
-    },
-    "dropoff": {
-        "address": "456 Elm St, Lincoln, IL",
-        "lat": 40.1500,
-        "lon": -88.2500,
-        "test": 123
-    },
-    "timestamp": "2025-06-21T10:00:00Z",
-    "status": "pending",
-    "priority": "high",
-    "assignee_id": None,
-    "eta_minutes": 15,
-    "instructions": "Leave at front door, ring bell twice",
-    "metadata": {
-        "fragile": True,
-        "customer_notes": "Handle with care"
-    }
+    "will_deliver_order?": "NO! HEHEHEHE",
+    "order_stolen_by_hacker?": "YES! HEHE"
 }
 
 # -------------------------------
 # 🧪 Schema validation function
-# -------------------------------
-def validate_task(task, schema_path):
-    with open(schema_path) as f:
-        schema = json.load(f)
-    validate(instance=task, schema=schema)
+# ------------------------------
 
 # -------------------------------
 # 🚀 Main logic
 # -------------------------------
 def main():
-    # ✅ Validate the task before sending
-    try:
-        validate_task(task, SCHEMA_PATH)
-    except ValidationError as e:
-        print(f"❌ Task validation failed before sending: {e.message}")
-        sys.exit(1)
-
-    # ✅ Load JSON schema as a string
-    with open(SCHEMA_PATH) as f:
-        schema_str = f.read() 
-
-    # ✅ Create Schema Registry client
-    schema_registry_conf = {"url": SCHEMA_REGISTRY_URL}
-    schema_registry_client = SchemaRegistryClient(schema_registry_conf)
-
-    # ✅ JSON serializer with schema + registry client
-    def object_to_dict(obj, ctx):
-        return obj
     
-    def encode_utf8(key,ctx):
-        key.encode("utf-8")
+    def encode_utf8(data,ctx):
+        data_json = json.dumps(data)
+        return data_json.encode("utf-8")
+    
+    def encode_utf8_key(data,ctx):
+        return data.encode("utf-8")
 
-    json_serializer = JSONSerializer(schema_str, schema_registry_client, to_dict=object_to_dict)
 
     # ✅ Kafka producer configuration
     producer_config = {
-        "bootstrap.servers": BOOTSTRAP,
-        "key.serializer": encode_utf8,    
-        "value.serializer": json_serializer,
-    }
-    producer = SerializingProducer(producer_config)
+        "bootstrap.servers": BOOTSTRAP
+        }
+    producer = Producer(producer_config)
 
     # ✅ Callback for delivery report
     def delivery_report(err, msg):
@@ -102,10 +63,12 @@ def main():
     try:
         producer.produce(
             topic=TOPIC,
-            key=task["order_id"],
-            value=task,
+            key= task["order_id"],
+            value= encode_utf8(task, None),
             on_delivery=delivery_report
         )
+        print(f"📤 Sending message to {TOPIC}: {task}")
+        print("Message Sucessfully sent!!")
         producer.flush()
     except Exception as e:
         print(f"❌ Failed to send message to {BOOTSTRAP}/{TOPIC}: {e}")

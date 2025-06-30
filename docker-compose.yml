@@ -1,13 +1,22 @@
+version: "3.8"
+
 services:
   zookeeper:
     image: confluentinc/cp-zookeeper:7.4.0
-    environment:
-      ZOOKEEPER_CLIENT_PORT: 2181
+    hostname: zookeeper
     ports:
       - "2181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+    volumes:
+      - zookeeper_data:/var/lib/zookeeper
+    networks:
+      - kafka_net
 
   kafka:
     image: confluentinc/cp-kafka:7.4.0
+    hostname: kafka
+    container_name: kafka
     depends_on:
       - zookeeper
     ports:
@@ -18,6 +27,25 @@ services:
       KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    networks:
+      - kafka_net
+
+  schema-registry:
+    image: confluentinc/cp-schema-registry:7.4.0
+    hostname: schema-registry
+    container_name: schema-registry
+    depends_on:
+      - kafka
+    ports:
+      - "8081:8081"
+    environment:
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: "PLAINTEXT://kafka:9092"
+      SCHEMA_REGISTRY_LISTENERS: "http://0.0.0.0:8081"
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+
+    networks:
+      - kafka_net
 
   dispatcher_service:
     build: ./backend/dispatcher_service
@@ -25,11 +53,17 @@ services:
       - ./backend/dispatcher_service:/app
     depends_on:
       - kafka
+      - schema-registry
     restart: always
     environment:
       PYTHONUNBUFFERED: '1'
       KAFKA_BOOTSTRAP: kafka:9092
-
+      SCHEMA_REGISTRY_URL: http://schema-registry:8081
+      DISPATCH_TOPIC: dispatch-tasks
+      DLQ_TOPIC : DLQ_TOPIC 
+      DEBUG: "true"
+    networks:
+      - kafka_net
 
   send_test_service:
     build: ./backend/send_test_service
@@ -37,7 +71,34 @@ services:
       - ./backend/send_test_service:/app
     depends_on:
       - kafka
+      - schema-registry
     restart: always
     environment:
       PYTHONUNBUFFERED: '1'
       KAFKA_BOOTSTRAP: kafka:9092
+      SCHEMA_REGISTRY_URL: http://schema-registry:8081
+    networks:
+      - kafka_net
+
+
+  dlq_web_app:
+    build: ./backend/dlq_web_app
+    volumes:
+      - ./backend/dlq_web_app:/app
+    depends_on:
+      - kafka
+    ports:
+      - "5050:5050"
+    environment:
+      KAFKA_BOOTSTRAP: kafka:9092
+      DLQ_TOPIC: DLQ_TOPIC
+      GROUP_ID: DLQ_GROUP
+    networks:
+      - kafka_net
+
+
+volumes:
+  zookeeper_data:
+
+networks:
+  kafka_net:

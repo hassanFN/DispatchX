@@ -5,9 +5,6 @@ from confluent_kafka import DeserializingConsumer
 from confluent_kafka.schema_registry import SchemaRegistryClient
 from confluent_kafka.schema_registry.json_schema import JSONDeserializer
 from jsonschema import validate, ValidationError
-from confluent_kafka import SerializingProducer
-from confluent_kafka.serialization import StringSerializer
-
 
 
 # --------- CONFIGURATION --------- #
@@ -17,10 +14,8 @@ SCHEMA_PATH = os.path.join(BASE_DIR, "schemas", "dispatch_task_schema.json")
 SCHEMA_REGISTRY_URL = os.getenv("SCHEMA_REGISTRY_URL", "http://schema-registry:8081")
 BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP", "kafka:9092")
 TOPIC = os.getenv("DISPATCH_TOPIC", "dispatch-tasks")
-DLQ_TOPIC = os.getenv("DLQ_TOPIC", "DLQ_TOPIC")
 GROUP_ID = "dispatcher_group"
 DEBUG = os.getenv("DEBUG", "false").lower() == "true"
-
 # ----------------------------------
 
 
@@ -50,19 +45,8 @@ json_deserializer = JSONDeserializer(
 )
 # --------------------------------
 
-#--------------- SerializingProducer for DLQ ----------------# #---- newly added 
 
-dlq_producer_config = {
-            "bootstrap.servers" : BOOTSTRAP,
-            "key.serializer": StringSerializer("utf_8"),
-            "value.serializer": StringSerializer("utf_8")
-}
-dlq_producer = SerializingProducer(dlq_producer_config)
-
-#------------------------------------------------------------#
-
-
-# --------- DLQ CONFIG ------------------------------------------------------- #
+# --------- CONSUMER CONFIG --------- #
 
 def key_deserializer(data, ctx):
     if data is None:
@@ -78,7 +62,7 @@ consumer_config = {
 }
 consumer = DeserializingConsumer(consumer_config)
 consumer.subscribe([TOPIC])
-# ---------------------------------------------------------------------------
+# ------------------------------------
 
 
 def process_task(task):
@@ -91,35 +75,13 @@ print(f"📬 Listening on topic: {TOPIC}...\n")
 
 try:
     while True:
-        try:
-            msg = consumer.poll(timeout=1.0)
-
-        except Exception as e:
-            print("Deserialization failed!")
-            dlq_value = json.dumps({
-            "error": str(e),
-            "raw_message": None,
-            "metadata": {
-            "topic": TOPIC
-                                    }
-                                    })  
-
-            dlq_producer.produce(topic = DLQ_TOPIC, key = "invalid_message", value = dlq_value) #---- newly added 
-            dlq_producer.flush()
+        msg = consumer.poll(timeout=1.0)
 
         if msg is None:
             continue
-         
+
         if msg.error():
             print(f"❌ Kafka error: {msg.error()}")
-            dlq_value = json.dumps({
-            "error": str(msg.error()) if msg.error() else "Schema validation failed",
-            "raw_message": None,
-                                    }
-                                    )  
-
-            dlq_producer.produce(topic = DLQ_TOPIC, key = msg.key(), value = dlq_value) #---- newly added 
-            dlq_producer.flush()
             continue
 
         task = msg.value()
@@ -135,17 +97,6 @@ try:
             process_task(task)
         except ValidationError as e:
             print(f"❌ Task validation failed: {e.message}")
-            dlq_value = json.dumps({
-            "error": str(msg.error()) if msg.error() else "Schema validation failed",
-            "raw_message": msg.value(),
-            "metadata": {
-            "topic": msg.topic(),
-            "partition": msg.partition(),
-            "offset": msg.offset()
-                                    }
-                                    })  
-            dlq_producer.produce(topic = DLQ_TOPIC, key = msg.key(), value = dlq_value) #---- newly added 
-            dlq_producer.flush()
             continue
 
         print(f"📬 Metadata: topic={msg.topic()}, partition={msg.partition()}, offset={msg.offset()}, key={msg.key()}")
@@ -156,8 +107,3 @@ except KeyboardInterrupt:
 finally:
     consumer.close()
     print("✅ Consumer connection closed")
-
-
-
-
-

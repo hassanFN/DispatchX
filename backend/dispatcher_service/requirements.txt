@@ -1,2 +1,7 @@
-kafka-python
+confluent-kafka
 jsonschema
+httpx
+cachetools
+authlib
+
+

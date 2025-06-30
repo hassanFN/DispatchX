@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>DLQ Messages</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 2rem;
+            background-color: #f8f8f8;
+        }
+        .message {
+            background: #fff;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            border-left: 4px solid #ff4d4f;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .message pre {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+    </style>
+</head>
+<body>
+    <h1>Dead Letter Queue Messages</h1>
+    {% if messages %}
+        {% for msg in messages %}
+            <div class="message">
+                <pre>{{ msg | tojson(indent=2) }}</pre>
+            </div>
+        {% endfor %}
+    {% else %}
+        <p>No DLQ messages found.</p>
+    {% endif %}
+</body>
+</html>

@@ -2,3 +2,5 @@ flask
 confluent-kafka
 pytest
 jinja2
+jsonschema
+attrs

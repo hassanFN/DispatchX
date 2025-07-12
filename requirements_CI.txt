@@ -6,3 +6,6 @@ jsonschema
 attrs
 httpx
 cachetools
+authlib
+uuid 
+structlog 

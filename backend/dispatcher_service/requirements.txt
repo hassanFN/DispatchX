@@ -3,5 +3,6 @@ jsonschema
 httpx
 cachetools
 authlib
-
+structlog
+flask
 

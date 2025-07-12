@@ -4,9 +4,9 @@ import os
 import json
 
 #----------Config---------#
-BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP", "kafka:9092")
-GROUP_ID = os.getenv("GROUP_ID", "DLQ_GROUP")
-TOPIC = os.getenv("DLQ_TOPIC", "DLQ_TOPIC")
+BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP")
+GROUP_ID = os.getenv("GROUP_ID")
+TOPIC = os.getenv("DLQ_TOPIC")
 #--------------------------
 
 #------Function for deserialization--------#
@@ -37,6 +37,7 @@ def index():
             print(f'Got a message. Message is now deserializing!')
             try:
                 messages.append(json.loads(value_deserializer(message.value())))
+                messages.append(message.headers()) #
                 print("Message was Deserialized successfully!")
             except Exception as e:
                  print(f'failed to decode message: {e}')

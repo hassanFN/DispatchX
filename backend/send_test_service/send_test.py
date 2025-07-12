@@ -6,6 +6,8 @@ from jsonschema import validate, ValidationError
 from confluent_kafka.schema_registry import SchemaRegistryClient
 from confluent_kafka.schema_registry.json_schema import JSONSerializer
 from confluent_kafka import SerializingProducer
+import uuid 
+import structlog 
 
 
 # -------------------------------
@@ -13,9 +15,16 @@ from confluent_kafka import SerializingProducer
 # -------------------------------
 BASE_DIR = os.path.dirname(__file__)
 SCHEMA_PATH = os.path.join(BASE_DIR, "schemas", "dispatch_task_schema.json")
-BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP", "kafka:9092")
-TOPIC = os.getenv("DISPATCH_TOPIC", "dispatch-tasks")
-SCHEMA_REGISTRY_URL = os.getenv("SCHEMA_REGISTRY_URL", "http://schema-registry:8081")
+BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP")
+TOPIC = os.getenv("DISPATCH_TOPIC")
+SCHEMA_REGISTRY_URL = os.getenv("SCHEMA_REGISTRY_URL")
+
+
+#--------------Struct Log config --------------------
+structlog.configure(processors=[structlog.processors.JSONRenderer()])
+log = structlog.get_logger(service="send_test")
+correlation_id = str(uuid.uuid4())
+#----------------------------------------------------
 
 # -------------------------------
 # ✅ Example payload (must match schema!)
@@ -47,6 +56,10 @@ task = {
     }
 }
 
+
+
+
+
 # -------------------------------
 # 🧪 Schema validation function
 # -------------------------------
@@ -58,12 +71,13 @@ def validate_task(task, schema_path):
 # -------------------------------
 # 🚀 Main logic
 # -------------------------------
-def main():
+def main(TOPIC, SCHEMA_REGISTRY_URL):
     # ✅ Validate the task before sending
     try:
         validate_task(task, SCHEMA_PATH)
+        log.info("✅ Schema validation succeeded", task=task["task_id"], correlation_id=correlation_id)
     except ValidationError as e:
-        print(f"❌ Task validation failed before sending: {e.message}")
+        log.error("❌ Schema validation failed", error=e.message, correlation_id=correlation_id)
         sys.exit(1)
 
     # ✅ Load JSON schema as a string
@@ -79,7 +93,7 @@ def main():
         return obj
     
     def encode_utf8(key,ctx):
-        key.encode("utf-8")
+        return key.encode("utf-8")
 
     json_serializer = JSONSerializer(schema_str, schema_registry_client, to_dict=object_to_dict)
 
@@ -94,9 +108,11 @@ def main():
     # ✅ Callback for delivery report
     def delivery_report(err, msg):
         if err is not None:
-            print(f"❌ Delivery failed for record {msg.key()}: {err}")
+            log.error("❌ Delivery failed", error=str(err), topic=msg.topic(), key=msg.key().decode(), correlation_id=correlation_id)
+            print("ERROR! could be the delivery_report function causing this")
         else:
-            print(f"✅ Record {msg.key()} successfully produced to {msg.topic()} [{msg.partition()}] at offset {msg.offset()}")
+           log.info("✅ Delivery succeeded", topic=msg.topic(), offset=msg.offset(), correlation_id=correlation_id)
+        #log.info("✅ Delivery succeeded", topic=msg.topic(), key=msg.key().decode(), offset=msg.offset(), correlation_id=correlation_id)
 
     # ✅ Send the message
     try:
@@ -104,15 +120,36 @@ def main():
             topic=TOPIC,
             key=task["order_id"],
             value=task,
+            headers=[("correlation_id", correlation_id.encode("utf-8"))],  
             on_delivery=delivery_report
         )
+        log.info("📤 Message sent",  topic=TOPIC, task=task, correlation_id=correlation_id)  
         producer.flush()
     except Exception as e:
-        print(f"❌ Failed to send message to {BOOTSTRAP}/{TOPIC}: {e}")
+        log.error("❌ Failed to send message", error=str(e), correlation_id=correlation_id)
         sys.exit(1)
 
 # -------------------------------
 # 🏁 Run the main function
 # -------------------------------
+
+
+
+# ---- HTTP health server ----
+
+from flask import Flask
+import threading
+
+app = Flask(__name__)
+
+@app.route("/healthz")
+def healthz():
+    return "ok", 200
+
+def start_http_server():
+    app.run(host="0.0.0.0", port=8080)
+
+# ---- App Entry ----
 if __name__ == "__main__":
-    main()
+    threading.Thread(target=start_http_server, daemon=True).start()
+    main(TOPIC, SCHEMA_REGISTRY_URL)

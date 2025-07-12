@@ -4,4 +4,4 @@ httpx
 cachetools
 authlib
 structlog
-uuid
+flask

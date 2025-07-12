@@ -1,73 +1,45 @@
 #!/usr/bin/env python3
-import os
-import json
-from confluent_kafka import DeserializingConsumer
+import os, json, uuid
+from confluent_kafka import DeserializingConsumer, SerializingProducer
 from confluent_kafka.schema_registry import SchemaRegistryClient
 from confluent_kafka.schema_registry.json_schema import JSONDeserializer
-from jsonschema import validate, ValidationError
-from confluent_kafka import SerializingProducer
 from confluent_kafka.serialization import StringSerializer
+from jsonschema import validate, ValidationError
+import structlog
 
-
-
-# --------- CONFIGURATION --------- #
+# ---------------------- CONFIG ---------------------- #
 BASE_DIR = os.path.dirname(__file__)
 SCHEMA_PATH = os.path.join(BASE_DIR, "schemas", "dispatch_task_schema.json")
-
 SCHEMA_REGISTRY_URL = os.getenv("SCHEMA_REGISTRY_URL", "http://schema-registry:8081")
-BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP", "kafka:9092")
-TOPIC = os.getenv("DISPATCH_TOPIC", "dispatch-tasks")
-DLQ_TOPIC = os.getenv("DLQ_TOPIC", "DLQ_TOPIC")
+BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP")
+TOPIC = os.getenv("DISPATCH_TOPIC")
+DLQ_TOPIC = os.getenv("DLQ_TOPIC")
 GROUP_ID = "dispatcher_group"
-DEBUG = os.getenv("DEBUG", "false").lower() == "true"
+DEBUG = os.getenv("DEBUG")
 
-# ----------------------------------
+# ----------------- LOGGING ------------------ #
+structlog.configure(processors=[structlog.processors.JSONRenderer()])
+log = structlog.get_logger(service="Dispatch-consumer")
+PROCESSED_MESSAGES = 0
+FAILED_MESSAGES = 0
+MESSAGES_PUSHED_TO_DLQ = 0
 
-
-# --------- LOAD SCHEMA --------- #
+# -------------- SCHEMA SETUP -------------- #
 with open(SCHEMA_PATH) as f:
     schema_str = f.read()
     schema = json.loads(schema_str)
-# --------------------------------
 
-
-# --------- SCHEMA REGISTRY CLIENT --------- #
-schema_registry_conf = {
-    "url": SCHEMA_REGISTRY_URL
-}
-schema_registry_client = SchemaRegistryClient(schema_registry_conf)
-# ------------------------------------------
-
-
-# --------- DESERIALIZER --------- #
-def dict_to_object(obj, ctx):
-    return obj
+schema_registry_client = SchemaRegistryClient({"url": SCHEMA_REGISTRY_URL})
 
 json_deserializer = JSONDeserializer(
     schema_str=schema_str,
     schema_registry_client=schema_registry_client,
-    from_dict=dict_to_object
+    from_dict=lambda obj, ctx: obj
 )
-# --------------------------------
 
-#--------------- SerializingProducer for DLQ ----------------# #---- newly added 
-
-dlq_producer_config = {
-            "bootstrap.servers" : BOOTSTRAP,
-            "key.serializer": StringSerializer("utf_8"),
-            "value.serializer": StringSerializer("utf_8")
-}
-dlq_producer = SerializingProducer(dlq_producer_config)
-
-#------------------------------------------------------------#
-
-
-# --------- DLQ CONFIG ------------------------------------------------------- #
-
+# ---------------- CONSUMER SETUP ---------------- #
 def key_deserializer(data, ctx):
-    if data is None:
-        return None
-    return data.decode("utf-8", errors="replace")
+    return data.decode("utf-8") if data else None
 
 consumer_config = {
     "bootstrap.servers": BOOTSTRAP,
@@ -78,81 +50,102 @@ consumer_config = {
 }
 consumer = DeserializingConsumer(consumer_config)
 consumer.subscribe([TOPIC])
-# ---------------------------------------------------------------------------
 
+# ---------------- DLQ PRODUCER ---------------- #
+dlq_producer = SerializingProducer({
+    "bootstrap.servers": BOOTSTRAP,
+    "key.serializer": StringSerializer("utf_8"),
+    "value.serializer": StringSerializer("utf_8")
+})
 
-def process_task(task):
-    # Placeholder for your actual business logic
-    print(f"🚚 Dispatching task {task['task_id']}... ✅")
+# ---------------- BUSINESS LOGIC ---------------- #
+def process_task(task,msg):
+    global PROCESSED_MESSAGES
+    try:
+        log.info("🚚 Dispatching task", task=task)
+        PROCESSED_MESSAGES += 1
+    # ====== DISPATCH LOGIC STARTS HERE ======
+        available_drivers = ['driver1', 'driver2', 'driver3']
+        task_assignments = {}
+        driver_index = 0 #
+        driver = available_drivers[driver_index]
+        driver_index = (driver_index + 1) % len(available_drivers)
+        task_assignments[task['task_id']] = driver
+        print(f"🚚 Assigned task {task['task_id']} to {driver}")
+        consumer.commit(msg)
+    except Exception as e:
+        log.info("Consumer Logic Failed", error=str(e))
+# ====== END DISPATCH LOGIC ==================
 
+def handle_kafka_message(msg):
+    global FAILED_MESSAGES, MESSAGES_PUSHED_TO_DLQ
+    correlation_id = "unknown"
+    if msg.headers() is not None:
+        headers = msg.headers()
+        if headers:
+            for k, v in headers:
+                if k == "correlation_id":
+                    correlation_id = v.decode("utf-8")
+                    break
+    else:
+        log.info("Message has no headers")
 
-print(f"📡 Connected to Kafka at {BOOTSTRAP}, schema registry at {SCHEMA_REGISTRY_URL}")
+    if msg.error():
+        log.error("❌ Kafka error", correlation_id=correlation_id, error=msg.error())
+        FAILED_MESSAGES += 1
+        send_to_dlq("Kafka message error", None, msg)
+        MESSAGES_PUSHED_TO_DLQ += 1
+        return
+
+    task = msg.value()
+    if task is None:
+        log.warning("⚠️ No message value to deserialize", correlation_id=correlation_id)
+        return
+
+    try:
+        validate(instance=task, schema=schema)
+        log.info(f"✅ Task {task['task_id']} is valid", correlation_id=correlation_id)
+        if DEBUG:
+            log.info("🧪 Task (debug):", task_content=json.dumps(task, indent=2), correlation_id=correlation_id)
+        process_task(task,msg)
+    except ValidationError as e:
+        log.error("❌ Task validation failed", error=e.message, correlation_id=correlation_id)
+        FAILED_MESSAGES += 1
+        send_to_dlq("Schema validation failed", task, msg)
+        MESSAGES_PUSHED_TO_DLQ += 1
+
+    log.info("📍 Task metadata", topic=msg.topic(), partition=msg.partition(), offset=msg.offset(), key=msg.key(), correlation_id=correlation_id)
+    log.info("Metrics", FAILED_MESSAGES = FAILED_MESSAGES, MESSAGES_PUSHED_TO_DLQ=MESSAGES_PUSHED_TO_DLQ, PROCESSED_MESSAGES=PROCESSED_MESSAGES)
+
+def send_to_dlq(error_message, raw_data, msg):
+    dlq_payload = {
+        "error_message": error_message,
+        "error": msg.error() if msg.error else None,
+        "raw_message": raw_data if raw_data else None,
+        "metadata": {
+            "topic": msg.topic(),
+            "partition": msg.partition(),
+            "offset": msg.offset()
+        }
+    }
+    try:
+        dlq_producer.produce(topic=DLQ_TOPIC, key="invalid_message", value=json.dumps(dlq_payload))
+        dlq_producer.flush()
+    except Exception as e:
+        log.info(f"Failed to send dlq message",topic = DLQ_TOPIC, error =str(e) )
+
+# ---------------- MAIN LOOP ---------------- #
+print(f"📡 Connected to Kafka at {BOOTSTRAP}")
 print(f"📬 Listening on topic: {TOPIC}...\n")
 
 try:
     while True:
-        try:
-            msg = consumer.poll(timeout=1.0)
 
-        except Exception as e:
-            print("Deserialization failed!")
-            dlq_value = json.dumps({
-            "error": str(e),
-            "raw_message": None,
-            "metadata": {
-            "topic": TOPIC
-                                    }
-                                    })  
-
-            dlq_producer.produce(topic = DLQ_TOPIC, key = "invalid_message", value = dlq_value) #---- newly added 
-            dlq_producer.flush()
-
-        if msg is None:
-            continue
-         
-        if msg.error():
-            print(f"❌ Kafka error: {msg.error()}")
-            dlq_value = json.dumps({
-            "error": str(msg.error()) if msg.error() else "Schema validation failed",
-            "raw_message": None,
-                                    }
-                                    )  
-
-            dlq_producer.produce(topic = DLQ_TOPIC, key = msg.key(), value = dlq_value) #---- newly added 
-            dlq_producer.flush()
-            continue
-
-        task = msg.value()
-        if task is None:
-            print("⚠️ No message deserialized")
-            continue
-
-        try:
-            validate(instance=task, schema=schema)
-            print(f"\n✅ Task {task['task_id']} is valid and ready to process")
-            if DEBUG:
-                print(f"📦 Task content: {json.dumps(task, indent=2)}")
-            process_task(task)
-        except ValidationError as e:
-            print(f"❌ Task validation failed: {e.message}")
-            dlq_value = json.dumps({
-            "error": str(msg.error()) if msg.error() else "Schema validation failed",
-            "raw_message": msg.value(),
-            "metadata": {
-            "topic": msg.topic(),
-            "partition": msg.partition(),
-            "offset": msg.offset()
-                                    }
-                                    })  
-            dlq_producer.produce(topic = DLQ_TOPIC, key = msg.key(), value = dlq_value) #---- newly added 
-            dlq_producer.flush()
-            continue
-
-        print(f"📬 Metadata: topic={msg.topic()}, partition={msg.partition()}, offset={msg.offset()}, key={msg.key()}")
-
+        msg = consumer.poll(timeout=1.0)
+        if msg is not None:
+            handle_kafka_message(msg)
 except KeyboardInterrupt:
     print("\n👋 Consumer shutdown initiated by user")
-
 finally:
     consumer.close()
     print("✅ Consumer connection closed")
@@ -161,3 +154,21 @@ finally:
 
 
 
+
+# ---- HTTP health server ----
+from flask import Flask
+import threading
+
+app = Flask(__name__)
+
+@app.route("/healthz")
+def healthz():
+    return "ok", 200
+
+def start_http_server():
+    app.run(host="0.0.0.0", port=8080)
+
+# ---- App Entry ----
+#if __name__ == "__main__":
+    #threading.Thread(target=start_http_server, daemon=True).start()
+    

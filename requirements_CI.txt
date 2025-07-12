@@ -4,3 +4,4 @@ pytest
 jinja2
 jsonschema
 attrs
+httpx

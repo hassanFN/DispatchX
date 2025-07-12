@@ -9,18 +9,19 @@ from unittest.mock import ANY
 
 TOPIC = "fake-topic"
 SCHEMA_REGISTRY_URL = "http://fake-schema-registry"
+BOOTSTRAP = "kafka:9092"
 
 
 def test_producer_send_success():
     global TOPIC
     global SCHEMA_REGISTRY_URL
-    
+    global BOOTSTRAP
     with patch("send_test_service.send_test.SerializingProducer") as MockProducer:      
         mock_producer = MagicMock()
         
         MockProducer.return_value = mock_producer
         
-        main(TOPIC, SCHEMA_REGISTRY_URL)
+        main(TOPIC, SCHEMA_REGISTRY_URL, BOOTSTRAP)
 
         mock_producer.produce.assert_called_once_with(
 
@@ -38,10 +39,11 @@ def test_producer_send_success():
 def test_send_producer_failure():
     global TOPIC
     global SCHEMA_REGISTRY_URL
+    global BOOTSTRAP
     with patch("send_test_service.send_test.SerializingProducer") as MockProducer: 
         mock_producer = MagicMock()
         mock_producer.produce.side_effect = Exception("Kafka send failed")
         MockProducer.return_value = mock_producer 
         with pytest.raises(SystemExit):  # producer exits on failure
-            main(TOPIC, SCHEMA_REGISTRY_URL)
+            main(TOPIC, SCHEMA_REGISTRY_URL, BOOTSTRAP)
 

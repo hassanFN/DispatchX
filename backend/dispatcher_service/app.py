@@ -93,7 +93,7 @@ def handle_kafka_message(msg):
     if msg.error():
         log.error("❌ Kafka error", correlation_id=correlation_id, error=msg.error())
         FAILED_MESSAGES += 1
-        send_to_dlq("Kafka message error", None, msg)
+        send_to_dlq("Kafka message error", None, msg)  #
         MESSAGES_PUSHED_TO_DLQ += 1
         return
 
@@ -138,18 +138,20 @@ def send_to_dlq(error_message, raw_data, msg):
 print(f"📡 Connected to Kafka at {BOOTSTRAP}")
 print(f"📬 Listening on topic: {TOPIC}...\n")
 
-try:
-    while True:
 
-        msg = consumer.poll(timeout=1.0)
-        if msg is not None:
-            handle_kafka_message(msg)
-except KeyboardInterrupt:
-    print("\n👋 Consumer shutdown initiated by user")
-finally:
-    consumer.close()
-    print("✅ Consumer connection closed")
+if __name__ == "__main__":
+    try:
+        while True:
 
+            msg = consumer.poll(timeout=1.0)
+            if msg is not None:
+                handle_kafka_message(msg)
+    except KeyboardInterrupt:
+        print("\n👋 Consumer shutdown initiated by user")
+    finally:
+        consumer.close()
+        print("✅ Consumer connection closed")
+    
 
 
 
@@ -169,6 +171,6 @@ def start_http_server():
     app.run(host="0.0.0.0", port=8080)
 
 # ---- App Entry ----
-#if __name__ == "__main__":
-    #threading.Thread(target=start_http_server, daemon=True).start()
+if __name__ == "__main__":
+    threading.Thread(target=start_http_server, daemon=True).start()
     

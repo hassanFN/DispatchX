@@ -71,7 +71,7 @@ def validate_task(task, schema_path):
 # -------------------------------
 # 🚀 Main logic
 # -------------------------------
-def main(TOPIC, SCHEMA_REGISTRY_URL, BOOTSTRAP):
+def main(TOPIC, SCHEMA_REGISTRY_URL):
     # ✅ Validate the task before sending
     try:
         validate_task(task, SCHEMA_PATH)
@@ -152,4 +152,4 @@ def start_http_server():
 # ---- App Entry ----
 if __name__ == "__main__":
     threading.Thread(target=start_http_server, daemon=True).start()
-    main(TOPIC, SCHEMA_REGISTRY_URL, BOOTSTRAP)
+    main(TOPIC, SCHEMA_REGISTRY_URL)

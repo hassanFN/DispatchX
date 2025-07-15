@@ -1,0 +1,9 @@
+{
+  "dependencies": {
+    "@shadcn/ui": "^0.0.4",
+    "framer-motion": "^12.23.6",
+    "lucide-react": "^0.525.0",
+    "mapbox-gl": "1.13.3",
+    "react-map-gl": "6.1.20"
+  }
+}

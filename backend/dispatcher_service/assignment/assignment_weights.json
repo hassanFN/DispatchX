@@ -1,0 +1,7 @@
+{
+  "proximity": 1.0,         
+  "workload": 0.5,
+  "rating": 2.0,
+  "available": 1000.0,
+  "eta": 0.2
+}

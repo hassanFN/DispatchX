@@ -87,9 +87,13 @@ drivers = [
     }
 ]
 
+# Recently processed tasks (in-memory store for API)
+recent_tasks = []
+MAX_TASK_HISTORY = 100
+
 # ---------------- BUSINESS LOGIC ---------------- #
 def process_task(task, msg):
-    global PROCESSED_MESSAGES
+    global PROCESSED_MESSAGES, recent_tasks
     try:
         log.info("🚚 Dispatching task", task=task)
         PROCESSED_MESSAGES += 1
@@ -97,15 +101,20 @@ def process_task(task, msg):
         weights = load_assignment_weights()
         best_driver, score = choose_best_driver(task, drivers, weights)
 
-        task_assignments = {}
         if best_driver:
-            task_assignments[task['task_id']] = best_driver['id']
+            task['assigned_driver'] = best_driver['id']
             print(f"🚚 Assigned task {task['task_id']} to {best_driver['id']} (score={score:.2f})")
             log.info("✅ Assignment", task_id=task['task_id'], driver_id=best_driver['id'], score=score)
             # Here you could update driver state/persist assignment
         else:
+            task['assigned_driver'] = None
             print(f"❌ No suitable driver found for {task['task_id']}")
             log.warn("❌ No suitable driver found", task_id=task['task_id'])
+
+        # Store recent task for API consumers
+        recent_tasks.append(task)
+        if len(recent_tasks) > MAX_TASK_HISTORY:
+            recent_tasks.pop(0)
 
         consumer.commit(msg)
     except Exception as e:
@@ -169,7 +178,7 @@ def send_to_dlq(error_message, raw_data, msg):
         log.info(f"Failed to send dlq message", topic=DLQ_TOPIC, error=str(e))
 
 # ---- HTTP health server ----
-from flask import Flask
+from flask import Flask, jsonify
 from flask_cors import CORS
 
 app = Flask(__name__)
@@ -178,6 +187,16 @@ CORS(app, resources={r"/*": {"origins": "http://localhost:5173"}})
 @app.route("/healthz")
 def healthz():
     return "ok", 200
+
+# ----- API Endpoints ----- #
+@app.route("/api/drivers")
+def api_drivers():
+    return jsonify(drivers)
+
+
+@app.route("/api/tasks")
+def api_tasks():
+    return jsonify(recent_tasks)
 
 def start_http_server():
     app.run(host="0.0.0.0", port=8080)

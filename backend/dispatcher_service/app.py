@@ -179,38 +179,37 @@ def send_to_dlq(error_message, raw_data, msg):
 
 # ---- HTTP health server ----
 from flask import Flask, jsonify
+from flask_cors import CORS
 
 from schemas.examples import example_messages
 
-from flask_cors import CORS
 
-app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "http://localhost:5173"}})
+def create_app():
+    """Application factory to create Flask app with routes registered."""
+    flask_app = Flask(__name__)
+    CORS(flask_app, resources={r"/*": {"origins": "http://localhost:5173"}})
 
-@app.route("/api/drivers")
-def api_drivers():
-    return jsonify(drivers), 200
+    @flask_app.route("/api/drivers")
+    def api_drivers():
+        return jsonify(drivers), 200
 
-@app.route("/api/tasks")
-def api_tasks():
-    return jsonify(list(example_messages.values())), 200
+    @flask_app.route("/api/tasks")
+    def api_tasks():
+        tasks = recent_tasks if recent_tasks else list(example_messages.values())
+        return jsonify(tasks), 200
 
-@app.route("/healthz")
-def healthz():
-    return "ok", 200
+    @flask_app.route("/healthz")
+    def healthz():
+        return "ok", 200
 
-# ----- API Endpoints ----- #
-@app.route("/api/drivers")
-def api_drivers():
-    return jsonify(drivers)
+    return flask_app
 
 
-@app.route("/api/tasks")
-def api_tasks():
-    return jsonify(recent_tasks)
+app = create_app()
 
-def start_http_server():
-    app.run(host="0.0.0.0", port=8080)
+
+def start_http_server(flask_app=None):
+    (flask_app or app).run(host="0.0.0.0", port=8080)
 
 # ---- MAIN ENTRY ----
 def kafka_loop():

@@ -7,5 +7,5 @@ attrs
 httpx
 cachetools
 authlib
-uuid 
-structlog 
+uuid
+structlog

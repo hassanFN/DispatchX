@@ -1,4 +1,4 @@
-const BACKEND_URL = "http://localhost:YOUR_BACKEND_PORT"; // or wherever your API will run
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:8000";
 
 export async function fetchTasks() {
   const res = await fetch(`${BACKEND_URL}/api/tasks`);

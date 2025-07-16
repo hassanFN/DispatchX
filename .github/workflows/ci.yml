@@ -24,6 +24,7 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements_CI.txt
         pip install pytest
+        pip install -r backend/dispatcher_service/requirements.txt
 
     - name: 🧪 Run tests
       run: |

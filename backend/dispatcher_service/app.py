@@ -169,9 +169,18 @@ def send_to_dlq(error_message, raw_data, msg):
         log.info(f"Failed to send dlq message", topic=DLQ_TOPIC, error=str(e))
 
 # ---- HTTP health server ----
-from flask import Flask
+from flask import Flask, jsonify
+from schemas.examples import example_messages
 
 app = Flask(__name__)
+
+@app.route("/api/drivers")
+def api_drivers():
+    return jsonify(drivers), 200
+
+@app.route("/api/tasks")
+def api_tasks():
+    return jsonify(list(example_messages.values())), 200
 
 @app.route("/healthz")
 def healthz():

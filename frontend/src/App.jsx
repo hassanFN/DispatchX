@@ -37,22 +37,21 @@
 
 import React from "react";
 import Map from "./components/Map";
-
-const fakeDrivers = [
-  { id: "driver1", location: { lat: 40.113, lon: -88.227 }, rating: 4.9, status: "available" },
-  { id: "driver2", location: { lat: 40.115, lon: -88.23 }, rating: 4.6, status: "available" },
-];
-
-const fakeTasks = [
-  { task_id: "task1", pickup: { lat: 40.111, lon: -88.226 } },
-  { task_id: "task2", pickup: { lat: 40.112, lon: -88.225 } },
-];
+import useDrivers from "./hooks/useDrivers";
+import useTasks from "./hooks/useTasks";
 
 function App() {
+  const { drivers, loading: loadingDrivers } = useDrivers();
+  const { tasks, loading: loadingTasks } = useTasks();
+
+  if (loadingDrivers || loadingTasks) {
+    return <div>Loading...</div>;
+  }
+
   return (
     <div style={{ padding: "1rem" }}>
-      <h1>DispatchX Map Test</h1>
-      <Map drivers={fakeDrivers} tasks={fakeTasks} />
+      <h1>DispatchX Map</h1>
+      <Map drivers={drivers} tasks={tasks} />
     </div>
   );
 }

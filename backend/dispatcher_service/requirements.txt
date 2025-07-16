@@ -6,3 +6,4 @@ authlib
 structlog
 flask
 googlemaps
+flask-cors

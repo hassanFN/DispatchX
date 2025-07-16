@@ -7,5 +7,7 @@ attrs
 httpx
 cachetools
 authlib
-uuid
+uuid 
 structlog
+structlog
+googlemaps

@@ -179,10 +179,21 @@ def send_to_dlq(error_message, raw_data, msg):
 
 # ---- HTTP health server ----
 from flask import Flask, jsonify
+
+from schemas.examples import example_messages
+
 from flask_cors import CORS
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "http://localhost:5173"}})
+
+@app.route("/api/drivers")
+def api_drivers():
+    return jsonify(drivers), 200
+
+@app.route("/api/tasks")
+def api_tasks():
+    return jsonify(list(example_messages.values())), 200
 
 @app.route("/healthz")
 def healthz():

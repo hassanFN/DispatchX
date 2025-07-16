@@ -2,6 +2,8 @@ import os
 import sys
 parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.insert(0, parent_dir)
+sys.path.insert(0, os.path.join(parent_dir, 'dispatcher_service'))
+os.environ.setdefault("GOOGLE_MAPS_API_KEY", "AIza" + "X" * 35)
 import pytest
 from unittest.mock import patch, MagicMock
 from dispatcher_service.app import dlq_producer,process_task,handle_kafka_message # adjust import to your path

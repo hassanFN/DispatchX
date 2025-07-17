@@ -75,6 +75,7 @@ services:
       DISPATCH_TOPIC: ${DISPATCH_TOPIC}
       DLQ_TOPIC: ${DLQ_TOPIC}
       DEBUG: ${DEBUG}
+      GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY} # Added Google Maps API key
     networks:
       - kafka_net
 
@@ -113,6 +114,8 @@ services:
       KAFKA_BOOTSTRAP: ${KAFKA_BOOTSTRAP}
       DLQ_TOPIC: ${DLQ_TOPIC}
       GROUP_ID: ${GROUP_ID}
+      #add google maps api $ API_KEY and then add the actual key in the .env file (task done but test it)
+      GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY}
     networks:
       - kafka_net
 

@@ -3,7 +3,7 @@
 example_messages = {
     "happy_path": {
         "schema_version": 1,
-        "task_id": "task-001",
+        "task_id": "    ",
         "order_id": "order-123",
         "pickup": {
             "address": "123 Main St, Springfield, IL",

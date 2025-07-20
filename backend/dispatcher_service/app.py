@@ -10,6 +10,16 @@ import structlog
 from assignment.config import load_assignment_weights
 from assignment.scoring import choose_best_driver
 
+# ---------------------- GOOGLE MAPS CLIENT ---------------------- #
+import os
+import googlemaps
+
+GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY")
+if not GOOGLE_MAPS_API_KEY:
+    raise EnvironmentError("❌ GOOGLE_MAPS_API_KEY not set in environment variables.")
+gmaps = googlemaps.Client(key=GOOGLE_MAPS_API_KEY)
+
+
 # ---------------------- CONFIG ---------------------- #
 BASE_DIR = os.path.dirname(__file__)
 SCHEMA_PATH = os.path.join(BASE_DIR, "schemas", "dispatch_task_schema.json")
@@ -69,23 +79,82 @@ drivers = [
         "location": {"lat": 40.1141, "lon": -88.2252},
         "current_tasks": 1,
         "rating": 4.8,
-        "status": "available"
+        "status": "available",
+        "route": [],
+        "destination": None
     },
     {
         "id": "driver2",
         "location": {"lat": 40.1020, "lon": -88.2350},
         "current_tasks": 0,
         "rating": 4.6,
-        "status": "available"
+        "status": "available",
+        "route": [],
+        "destination": None
     },
     {
         "id": "driver3",
         "location": {"lat": 40.1200, "lon": -88.2100},
         "current_tasks": 2,
         "rating": 5.0,
-        "status": "busy"
+        "status": "busy",
+        "route": [],
+        "destination": None
     }
 ]
+
+# ------------ DRIVER MOVEMENT SIMULATOR ------------- #
+import random
+import time
+
+def simulate_driver_movement(drivers):
+    while True:
+        for driver in drivers:
+            # If driver has a route, move step by step
+            if driver.get('route') and len(driver['route']) > 0:
+                # Move to next waypoint
+                next_point = driver['route'].pop(0)
+                driver['location'] = next_point
+
+                # If route is empty after this step, handle arrival
+                if len(driver['route']) == 0 and driver.get('destination'):
+                    # ARRIVED at current destination!
+                    if driver.get('status') == "en_route_pickup":
+                        print(f"{driver['id']} arrived at PICKUP!")
+                        # Assign route to dropoff
+                        if driver.get('current_task'):
+                            dropoff = driver['current_task']['dropoff']
+                            pickup = driver['current_task']['pickup']
+                            origin = f"{pickup['lat']},{pickup['lon']}"
+                            dest = f"{dropoff['lat']},{dropoff['lon']}"
+                            # Get new route from pickup to dropoff
+                            route = gmaps.directions(origin, dest, mode="driving")
+                            waypoints = []
+                            for step in route[0]['legs'][0]['steps']:
+                                lat = step['start_location']['lat']
+                                lon = step['start_location']['lng']
+                                waypoints.append({"lat": lat, "lon": lon})
+                            waypoints.append({
+                                "lat": route[0]['legs'][0]['end_location']['lat'],
+                                "lon": route[0]['legs'][0]['end_location']['lng']
+                            })
+                            driver['route'] = waypoints
+                            driver['destination'] = {
+                                "lat": dropoff['lat'], "lon": dropoff['lon']
+                            }
+                            driver['status'] = "en_route_dropoff"
+                    elif driver.get('status') == "en_route_dropoff":
+                        print(f"{driver['id']} arrived at DROPOFF!")
+                        driver['status'] = "available"
+                        driver['destination'] = None
+                        driver['current_task'] = None
+            # else: can wander randomly or stay put when available
+        time.sleep(2)
+
+
+
+# Start the movement simulator in a background thread
+threading.Thread(target=simulate_driver_movement, args=(drivers,), daemon=True).start()
 
 # Recently processed tasks (in-memory store for API)
 recent_tasks = []
@@ -102,6 +171,30 @@ def process_task(task, msg):
         best_driver, score = choose_best_driver(task, drivers, weights)
 
         if best_driver:
+
+            origin = f"{best_driver['location']['lat']},{best_driver['location']['lon']}"
+            dest = f"{task['pickup']['lat']},{task['pickup']['lon']}"
+            route = gmaps.directions(origin, dest, mode="driving")
+            # Simulate route assignment
+
+            waypoints = []
+            for step in route[0]['legs'][0]['steps']:
+                lat = step['start_location']['lat']
+                lon = step['start_location']['lng']
+                waypoints.append({"lat": lat, "lon": lon})
+            # Optionally add the last destination point
+            waypoints.append({"lat": route[0]['legs'][0]['end_location']['lat'],
+                            "lon": route[0]['legs'][0]['end_location']['lng']})
+            # Update driver state
+
+            best_driver['route'] = waypoints
+            best_driver['destination'] = {"lat": task['pickup']['lat'], "lon": task['pickup']['lon']}
+            best_driver['status'] = "en_route_pickup"    # <- distinguish pickup from dropoff
+            best_driver['current_task'] = task           # <- save the whole task
+
+            # Update task with assigned driver
+
+
             task['assigned_driver'] = best_driver['id']
             print(f"🚚 Assigned task {task['task_id']} to {best_driver['id']} (score={score:.2f})")
             log.info("✅ Assignment", task_id=task['task_id'], driver_id=best_driver['id'], score=score)
@@ -183,7 +276,6 @@ from flask_cors import CORS
 
 from schemas.examples import example_messages
 
-
 def create_app():
     """Application factory to create Flask app with routes registered."""
     flask_app = Flask(__name__)
@@ -204,9 +296,7 @@ def create_app():
 
     return flask_app
 
-
 app = create_app()
-
 
 def start_http_server(flask_app=None):
     (flask_app or app).run(host="0.0.0.0", port=8080)

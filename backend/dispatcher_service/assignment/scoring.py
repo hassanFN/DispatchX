@@ -35,6 +35,8 @@ def compute_distance(pickup, driver_loc):
     """
     Compute Haversine (real-world geo) distance between pickup and driver, in km.
     """
+    print (f"[HAVERSINE] Calculating distance from {pickup} to {driver_loc}")
+    print (f'[HAVERSINE] Distance between {pickup} and {driver_loc}: {haversine(pickup, driver_loc):.2f} km')
     return haversine(pickup, driver_loc)
 
 def estimate_eta(driver, pickup):
@@ -45,17 +47,29 @@ def estimate_eta(driver, pickup):
     origin = f"{driver['location']['lat']},{driver['location']['lon']}"
     dest = f"{pickup['lat']},{pickup['lon']}"
 
+    # New: check for missing or incomplete coordinates
+    if not driver.get("location") or not pickup:
+        print(f"⚠️ Missing coordinates: driver={driver.get('location')}, pickup={pickup}")
+        return 999  # fallback ETA
+    if not driver["location"].get("lat") or not driver["location"].get("lon") or not pickup.get("lat") or not pickup.get("lon"):
+        print(f"⚠️ Incomplete coordinates for ETA. Skipping directions API.")
+        return 999  # fallback ETA
+
     try:
+        print(f"[REAL CALL] Google Maps Requesting ETA from {origin} to {dest}")
         result = gmaps.directions(origin, dest, mode="driving", departure_time="now")
-        if result and 'legs' in result[0]:
+        if result and result[0].get("legs"):
             eta_sec = result[0]['legs'][0]['duration']['value']
-            # Add overhead for driver's current tasks (simulate stops)
+            print(f"[GOOGLE MAPS] ETA for {origin} -> {dest}: {eta_sec/60:.2f} min")
             return eta_sec / 60 + driver['current_tasks'] * 3
+        else:
+            raise ValueError("Invalid Google Maps API response structure")
     except Exception as e:
         print(f"⚠️ Google Maps ETA failed: {e}")
         sleep(0.5)  # throttle if error loop
     # Fallback if error
     dist = compute_distance(pickup, driver['location'])
+    print(f"[HAVERSINE] Fallback distance for {origin} -> {dest}: {dist:.2f} km")
     return dist * 2 + driver['current_tasks'] * 3
 
 
